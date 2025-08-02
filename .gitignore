@@ -1,0 +1,32 @@
+# Log files
+logs/
+*.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+.coverage
+htmlcov/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
