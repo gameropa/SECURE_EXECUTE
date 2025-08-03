@@ -30,3 +30,6 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+
+# SSH keys
+/SSH-Keys

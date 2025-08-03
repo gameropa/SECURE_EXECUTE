@@ -67,15 +67,17 @@ def secure_execute(
                 logging.warning(f"Rate limit exceeded for function '{func.__name__}'")
                 raise SecurityError(f"Rate limit exceeded: {rate_limit} calls/minute")
             
-            # Pre-execution threat detection
+            # Pre-execution threat detection for string arguments only
             all_threats = []
             for arg in args:
-                threats_found = detector.detect_threats(arg, context.get_security_summary())
-                all_threats.extend(threats_found)
+                if isinstance(arg, str):  # Only scan string arguments
+                    threats_found = detector.detect_threats(arg, context.get_security_summary())
+                    all_threats.extend(threats_found)
             
             for key, value in kwargs.items():
-                threats_found = detector.detect_threats(value, context.get_security_summary())
-                all_threats.extend(threats_found)
+                if isinstance(value, str):  # Only scan string values
+                    threats_found = detector.detect_threats(value, context.get_security_summary())
+                    all_threats.extend(threats_found)
             
             # Process detected threats
             sanitized_args = list(args)
@@ -92,9 +94,9 @@ def secure_execute(
                     # Use custom response handler
                     try:
                         custom_handler = custom_responses[threat_type]
-                        sanitized_data = custom_handler(args, kwargs)
-                        if sanitized_data:
-                            sanitized_args, sanitized_kwargs = sanitized_data
+                        custom_result = custom_handler(args, kwargs)
+                        if custom_result and len(custom_result) == 2:
+                            sanitized_args, sanitized_kwargs = custom_result
                     except Exception as e:
                         logging.error(f"Custom response handler failed: {e}")
                         raise SecurityError(f"Custom security handler failed for {threat_type}")
@@ -109,9 +111,10 @@ def secure_execute(
                         raise SecurityError(f"Security threat blocked: {threat_type} ({severity})")
                     
                     if auto_sanitize and action in ["SANITIZED", "LOGGED"]:
-                        # Apply sanitization to individual arguments
+                        # Apply sanitization to individual string arguments
                         for i, arg in enumerate(args):
                             if isinstance(arg, str):
+                                original_arg = arg
                                 if threat_type == "SQL_INJECTION":
                                     sanitized_args[i] = responder._sanitize_sql(arg)
                                 elif threat_type == "XSS":
@@ -123,7 +126,30 @@ def secure_execute(
                                     sanitized_val = responder._sanitize_sql(arg)
                                     sanitized_val = responder._sanitize_xss(sanitized_val)
                                     sanitized_args[i] = sanitized_val
-            
+                                
+                                # Log sanitization if significant change occurred
+                                if sanitized_args[i] != original_arg:
+                                    logging.info(f"Sanitized argument: '{original_arg[:50]}...' -> '{sanitized_args[i][:50]}...'")
+                        
+                        # Apply sanitization to string kwargs
+                        for key, value in kwargs.items():
+                            if isinstance(value, str):
+                                original_value = value
+                                if threat_type == "SQL_INJECTION":
+                                    sanitized_kwargs[key] = responder._sanitize_sql(value)
+                                elif threat_type == "XSS":
+                                    sanitized_kwargs[key] = responder._sanitize_xss(value)
+                                elif threat_type == "PATH_TRAVERSAL":
+                                    sanitized_kwargs[key] = responder._sanitize_path(value)
+                                elif threat_type == "CODE_INJECTION":
+                                    sanitized_val = responder._sanitize_sql(value)
+                                    sanitized_val = responder._sanitize_xss(sanitized_val)
+                                    sanitized_kwargs[key] = sanitized_val
+                                
+                                # Log sanitization if significant change occurred
+                                if sanitized_kwargs[key] != original_value:
+                                    logging.info(f"Sanitized kwarg {key}: '{original_value[:50]}...' -> '{sanitized_kwargs[key][:50]}...'")
+
             # Execute function with potentially sanitized arguments
             try:
                 result = func(*sanitized_args, **sanitized_kwargs)

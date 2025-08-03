@@ -83,7 +83,10 @@ class SecurityResponse:
     def _medium_response(self, threat_type: str, data: Any, 
                         context: SecurityContext) -> Tuple[bool, Any, str]:
         """Handle medium severity threats - sanitize and monitor."""
-        context.threat_level = max(context.threat_level, "MEDIUM")
+        current_level = context.threat_level
+        severity_levels = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+        if severity_levels.get("MEDIUM", 1) > severity_levels.get(current_level, 0):
+            context.threat_level = "MEDIUM"
         
         if threat_type == "XSS":
             sanitized = self._sanitize_xss(data)
